@@ -60,6 +60,7 @@ void _testClient() {
     final serverUrl = 'http://${server.address.host}:${server.port}';
 
     var serverPrologue = false;
+    var serverSendingData = false;
     var serverEpilogue = false;
     unawaited(() async {
       await for (HttpRequest request in server) {
@@ -67,6 +68,7 @@ void _testClient() {
         try {
           serverPrologue = true;
           final stream = Stream.periodic(Duration(milliseconds: 1), (_) {
+            serverSendingData = true;
             return [0];
           });
           await response.addStream(stream);
@@ -82,19 +84,18 @@ void _testClient() {
     final cts = CancellationTokenSource(Duration(seconds: 3));
     final token = cts.token;
     final client = CancelableClient(token);
-    final clock = Stopwatch();
+
     Object? error;
 
     try {
-      clock.start();
       await client.get(Uri.parse(serverUrl));
     } catch (e) {
-      clock.stop();
       error = e;
     }
 
     expect(error, isA<TaskCanceledException>(), reason: 'exception');
     expect(serverPrologue, true, reason: 'serverPrologue');
+    expect(serverSendingData, true, reason: 'serverSendingData');
     expect(serverEpilogue, false, reason: 'serverEpilogue');
     await Future<void>.delayed(Duration(seconds: 1));
     expect(serverEpilogue, true, reason: 'serverEpilogue');
