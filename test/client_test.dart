@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:cancelable_http_client/cancelable_http_client.dart';
 import 'package:http/http.dart';
-import 'package:multitasking/multitasking.dart';
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
 

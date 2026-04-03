@@ -2,7 +2,7 @@
 
 A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or the operation of sending data via request.
 
-Version: 1.0.0
+Version: 1.1.0
 
 [![Pub Package](https://img.shields.io/pub/v/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client)
 [![Pub Monthly Downloads](https://img.shields.io/pub/dm/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client/score)
@@ -102,7 +102,6 @@ import 'dart:io';
 import 'package:cancelable_http_client/cancelable_http_client.dart';
 import 'package:http/http.dart';
 import 'package:mime/mime.dart';
-import 'package:multitasking/multitasking.dart';
 
 void main() async {
   final (demoServer, serverUrl) = await _demoServer();

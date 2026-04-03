@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:cancelable_http_client/cancelable_http_client.dart';
 import 'package:http/http.dart';
 import 'package:mime/mime.dart';
-import 'package:multitasking/multitasking.dart';
 
 void main() async {
   final (demoServer, serverUrl) = await _demoServer();

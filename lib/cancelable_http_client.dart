@@ -4,7 +4,11 @@ import 'package:http/http.dart';
 import 'package:multitasking/multitasking.dart';
 
 export 'package:multitasking/multitasking.dart'
-    show CancellationToken, CancellationTokenSource, TaskCanceledException;
+    show
+        CancellationToken,
+        CancellationTokenSource,
+        StreamExtension,
+        TaskCanceledException;
 
 /// A [CancelableClient] is a wrapper over [Client] that allows to cancel both a
 /// request and the operation of receiving data from the response stream.
