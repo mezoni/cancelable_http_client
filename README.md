@@ -20,7 +20,7 @@ When a cancellation request is made, the token cancels the HTTP operation.
 The result of the cancellation is the exception [TaskCanceledException](https://pub.dev/documentation/multitasking/latest/multitasking/TaskCanceledException-class.html), which indicates that the operation did not complete successfully.
 
 Canceling an HTTP operation on the client does not mean cancelling the operation on the server.  
-However, when sending streaming data to the server or receiving streaming data from the server, the server is able to determine that the client has cancelled the data transfer operation (if the server receives/sends data in parts).  
+However, when sending streaming data to the server or receiving streaming data from the server, the server is able to determine that the client has cancelled the data transfer operation (if the server or client receives/sends data in parts).  
 Thus, cancellation of a request does not mean cancellation of sending of a request (because sending a request happens very quickly), but rather an action to cancel the transfer of data.  
 
 The client also supports functionality that prevents a request from being sent if a cancellation request has already been made previously.
