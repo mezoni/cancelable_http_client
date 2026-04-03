@@ -47,7 +47,7 @@ void _testClient() {
       error = e;
     }
 
-    expect(error, isA<TaskCanceledException>(), reason: 'exception');
+    expect(error, isA<TaskCanceledException>(), reason: 'error');
     expect(clock.elapsedMilliseconds, lessThan(10000),
         reason: 'elapsedMilliseconds');
     expect(serverPrologue, true, reason: 'serverPrologue');
@@ -93,7 +93,7 @@ void _testClient() {
       error = e;
     }
 
-    expect(error, isA<TaskCanceledException>(), reason: 'exception');
+    expect(error, isA<TaskCanceledException>(), reason: 'error');
     expect(serverPrologue, true, reason: 'serverPrologue');
     expect(serverSendingData, true, reason: 'serverSendingData');
     expect(serverEpilogue, false, reason: 'serverEpilogue');
@@ -133,12 +133,10 @@ void _testClient() {
     final cts = CancellationTokenSource(Duration(seconds: 3));
     final token = cts.token;
     final client = CancelableClient(token);
-    final clock = Stopwatch();
     Object? error;
 
     var clientSendingData = false;
     try {
-      clock.start();
       final request = MultipartRequest("POST", Uri.parse(serverUrl));
       final data = List.filled(256 * 256, 0);
       final stream = Stream.periodic(Duration(milliseconds: 1), (_) {
@@ -151,11 +149,10 @@ void _testClient() {
       request.files.add(file);
       await client.send(request);
     } catch (e) {
-      clock.stop();
       error = e;
     }
 
-    expect(error, isA<TaskCanceledException>(), reason: 'exception');
+    expect(error, isA<TaskCanceledException>(), reason: 'error');
     expect(clientSendingData, true, reason: 'clientSendingData');
     expect(serverPrologue, true, reason: 'serverPrologue');
     expect(serverReceivingData, true, reason: 'serverReceivingData');

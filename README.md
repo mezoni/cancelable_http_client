@@ -1,6 +1,6 @@
 # cancelable_http_client
 
-A cancelable HTTP client is a wrapper over `http.BaseClient` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
+A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 
 Version: 1.1.1
 
@@ -14,15 +14,20 @@ Version: 1.1.1
 ## About this software
 
 This software is a small library that implements the ability to cancel HTTP operations using a [Client](https://pub.dev/documentation/http/latest/http/Client-class.html) from the [http](https://pub.dev/packages/http) package.  
-This is implemented using a composition of class [BaseClient](https://pub.dev/documentation/http/latest/http/BaseClient-class.html) and class [CancellationToken](https://pub.dev/documentation/multitasking/latest/multitasking/CancellationToken-class.html).
+This is implemented using a composition of class [Client](https://pub.dev/documentation/http/latest/http/Client-class.html) and class [CancellationToken](https://pub.dev/documentation/multitasking/latest/multitasking/CancellationToken-class.html).  
 When a cancellation request is made, the token cancels the HTTP operation.
 
 The result of the cancellation is the exception [TaskCanceledException](https://pub.dev/documentation/multitasking/latest/multitasking/TaskCanceledException-class.html), which indicates that the operation did not complete successfully.
 
-Canceling an HTTP operation on the client does not mean cancelling the operation on the server (except when sending streaming data to the server).  
-Also cancel operations do not close the client.
+Canceling an HTTP operation on the client does not mean cancelling the operation on the server.  
+However, when sending streaming data to the server or receiving streaming data from the server, the server is able to determine that the client has cancelled the data transfer operation (if the server receives/sends data in parts).  
+Thus, cancellation of a request does not mean cancellation of sending of a request (because sending a request happens very quickly), but rather an action to cancel the transfer of data.  
 
-The operating algorithm is as follows.  
+The client also supports functionality that prevents a request from being sent if a cancellation request has already been made previously.
+
+Also cancel operations do not close the client which allows its further use.
+
+The operating algorithm is as follows.
 
 **Receiving data from the server**.  
 If a cancellation request is initiated before a response is received from the server, the response is ignored and the operation of receiving data from the server is cancelled immediately after receiving a response.  
