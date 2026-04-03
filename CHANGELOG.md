@@ -1,8 +1,9 @@
 # Changelog
 
-## 1.2.0
+## 1.1.1
 
 - The `client_test.dart` test has been slightly improved.
+- The package description has been changed.
 
 ## 1.1.0
 
