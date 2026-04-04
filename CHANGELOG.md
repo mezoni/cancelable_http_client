@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3
+
+- Changes in the file `README.md`.
+
 ## 1.1.2
 
 - The example file `example_multipart_request.dart` has been changed. The source code has become simpler and clearer.

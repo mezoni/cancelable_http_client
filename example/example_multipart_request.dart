@@ -49,7 +49,7 @@ void main() async {
     request.files.add(file);
     _client('Sending multipart request');
     await client.send(request);
-    _client('Received request');
+    _client('Received response');
   } catch (e) {
     _client('Error: $e');
   }

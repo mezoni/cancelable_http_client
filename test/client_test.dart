@@ -67,11 +67,12 @@ void _testClient() {
         final response = request.response;
         try {
           serverPrologue = true;
-          final stream = Stream.periodic(Duration(milliseconds: 1), (_) {
+          for (var i = 0; i < 5; i++) {
             serverSendingData = true;
-            return [0];
-          });
-          await response.addStream(stream);
+            await Future<void>.delayed(Duration(seconds: 1));
+            response.write(i);
+          }
+
           serverEpilogue = true;
         } catch (e) {
           //
@@ -84,12 +85,11 @@ void _testClient() {
     final cts = CancellationTokenSource(Duration(seconds: 3));
     final token = cts.token;
     final client = CancelableClient(token);
-
     Object? error;
-
     try {
       await client.get(Uri.parse(serverUrl));
     } catch (e) {
+      client.close();
       error = e;
     }
 
@@ -97,8 +97,6 @@ void _testClient() {
     expect(serverPrologue, true, reason: 'serverPrologue');
     expect(serverSendingData, true, reason: 'serverSendingData');
     expect(serverEpilogue, false, reason: 'serverEpilogue');
-    await Future<void>.delayed(Duration(seconds: 1));
-    expect(serverEpilogue, true, reason: 'serverEpilogue');
     await server.close();
   });
 

@@ -2,7 +2,7 @@
 
 A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 
-Version: 1.1.2
+Version: 1.1.3
 
 [![Pub Package](https://img.shields.io/pub/v/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client)
 [![Pub Monthly Downloads](https://img.shields.io/pub/dm/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client/score)
@@ -20,12 +20,15 @@ When a cancellation request is made, the token cancels the HTTP operation.
 The result of the cancellation is the exception [TaskCanceledException](https://pub.dev/documentation/multitasking/latest/multitasking/TaskCanceledException-class.html), which indicates that the operation did not complete successfully.
 
 Canceling an HTTP operation on the client does not mean cancelling the operation on the server.  
-However, when sending streaming data to the server or receiving streaming data from the server, the server is able to determine that the client has cancelled the data transfer operation (if the server or client receives/sends data in parts).  
-Thus, cancellation of a request does not mean cancellation of sending of a request (because sending a request happens very quickly), but rather an action to cancel the transfer of data.  
 
-The client also supports functionality that prevents a request from being sent if a cancellation request has already been made previously.
+Client-side cancellation allows to automatically cancel the following actions:
 
-Also cancel operations do not close the client which allows its further use.
+- Receiving data from the server on the client
+- Sending data from the client on the server
+- (If necessary) Any action on the client that can be interrupted by throwing an exception (using `token.throwIfCanceled()`)
+
+Cancel operations do not close the client. If necessary, it must be closed forcibly.  
+The client prevents a request from being sent if a cancellation request has already been made previously.  
 
 The operating algorithm is as follows.
 
@@ -37,7 +40,7 @@ If a cancellation request is initiated after a response is received from the ser
 Before sending a request, the client prepares the data to be sent.  
 Data transfer is performed through streams for each part independently.  
 These streams must be submitted to the request as [cancelable](https://pub.dev/documentation/multitasking/latest/multitasking/StreamExtension/asCancelable.html) streams (that is, supporting the cancel operation and throwing the  `TaskCanceledException` exception).  
-Initiating a cancellation request  cancels the sending of data through these streams, which causes the server to return an error stating that the connection was closed while receiving data. Until this response is received from the server, the client throws the `TaskCanceledException` exception and ignores the response from the server.  
+Initiating a cancellation request cancels the sending of data through these streams.
 
 ## Example receiving data
 
