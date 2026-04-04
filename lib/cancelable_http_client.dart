@@ -49,11 +49,17 @@ class CancelableClient with BaseClient {
     try {
       response = await task.withCancellation(_token);
     } on TaskCanceledException {
-      // Ignore the cancelled connection establishment.
+      // Ignore the cancelled operation.
       unawaited(() async {
         try {
-          await (await task).stream.listen((_) {}).cancel();
-        } catch (e) {/**/}
+          // Wait for a response from the server.
+          final response = await task;
+          final stream = response.stream;
+          // Notify the server to cancel the data transfer.
+          await stream.listen((_) {}).cancel();
+        } catch (e) {
+          // Ignore exception
+        }
       }());
 
       rethrow;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- The example file `example_multipart_request.dart` has been changed. The source code has become simpler and clearer.
+
 ## 1.1.1
 
 - The `client_test.dart` test has been slightly improved.

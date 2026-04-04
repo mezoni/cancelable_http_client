@@ -106,140 +106,66 @@ import 'dart:io';
 
 import 'package:cancelable_http_client/cancelable_http_client.dart';
 import 'package:http/http.dart';
-import 'package:mime/mime.dart';
 
 void main() async {
-  final (demoServer, serverUrl) = await _demoServer();
-  final cts = CancellationTokenSource();
-  final token = cts.token;
-
-  final file = File('__my__file.txt');
-  file.writeAsBytesSync(List.filled(1 * 1024 * 1024, 48));
-
-  unawaited(_hack.future.then((_) {
-    _client('Canceling');
-    cts.cancel();
-  }));
-
-  final uri = Uri.parse('$serverUrl/upload');
-  try {
-    await exampleMultipartRequest(file, uri, token);
-  } catch (e) {
-    _client('Error: $e');
-  } finally {
-    file.deleteSync();
-    Timer(Duration(seconds: 3), () async {
-      await demoServer.close();
-    });
-  }
-}
-
-final _hack = Completer<void>();
-
-Future<void> exampleMultipartRequest(
-    File file, Uri uri, CancellationToken token) async {
-  token.throwIfCanceled();
-  final request = MultipartRequest('POST', uri);
-  final fp = file.openRead().asCancelable(token, throwIfCanceled: true);
-  final fileLength = file.lengthSync();
-  request.files.add(MultipartFile('file', fp, fileLength, filename: file.path));
-  final client = CancelableClient(token);
-  final response = await client.send(request);
-  if (response.statusCode == 200) {
-    _client('Uploaded!');
-  }
-}
-
-void _client(String text) {
-  print('Client: $text');
-}
-
-Future<(HttpServer, String)> _demoServer() async {
   final server = await HttpServer.bind('localhost', 8080);
   final serverUrl = 'http://${server.address.host}:${server.port}';
-  _server('Running on $serverUrl');
-
-  Future<void> handleUpload(HttpRequest request) async {
-    final contentType = request.headers.contentType;
-    if (contentType == null) {
-      throw HttpException('contentType');
-    }
-
-    final mimeType = contentType.mimeType;
-    if (mimeType != 'multipart/form-data') {
-      throw HttpException('mime-type: $mimeType');
-    }
-
-    final boundary = contentType.parameters['boundary'];
-    if (boundary == null) {
-      throw HttpException('boundary');
-    }
-
-    final transformer = MimeMultipartTransformer(boundary);
-    final parts = request.cast<List<int>>().transform(transformer);
-    final StreamSubscription<MimeMultipart> sub;
-    sub = parts.listen((part) async {
-      final headers = part.headers;
-      final contentDisposition = headers['content-disposition'];
-      if (contentDisposition == null) {
-        throw HttpException('content-disposition');
-      }
-
-      _server('contentDisposition: $contentDisposition');
-      var length = 0;
-      await for (final data in part) {
-        final byteCount = data.length;
-        length += byteCount;
-        _server('Received: $length (+$byteCount)');
-
-        if (length > 524288) {
-          if (!_hack.isCompleted) {
-            _hack.complete();
-          }
-        }
-      }
-
-      _server('Saved: $length');
-    });
-
-    final completer = Completer<void>();
-    sub.onDone(() {
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    });
-    sub.onError((Object e, StackTrace? s) {
-      if (!completer.isCompleted) {
-        completer.completeError(e, s);
-      }
-    });
-    return completer.future;
-  }
 
   unawaited(() async {
     await for (HttpRequest request in server) {
-      _server('Begin request ${request.requestedUri}');
       final response = request.response;
-      Object? exception;
+      _server('Receiving request');
       try {
-        if (request.method == 'POST' && request.uri.path == '/upload') {
-          await handleUpload(request);
-        } else {
-          request.response
-            ..statusCode = HttpStatus.methodNotAllowed
-            ..write('Unsupported request');
+        _server('Begin operation');
+        await for (final _ in request) {
+          _server('Receiving data');
         }
+
+        _server('End operation');
       } catch (e) {
-        exception = e;
-        _server('Exception $exception');
+        _server('Error: $e');
       } finally {
-        _server('End request ${request.requestedUri}');
+        _server('Send response');
         await response.close();
       }
     }
   }());
 
-  return (server, serverUrl);
+  final cts = CancellationTokenSource(Duration(seconds: 1));
+  final token = cts.token;
+  final client = CancelableClient(token);
+  try {
+    final request = MultipartRequest("POST", Uri.parse(serverUrl));
+    const partSize = 0xffff;
+    final dummyData = List.filled(partSize, 48);
+    final stream = Stream.periodic(Duration(milliseconds: 350), (_) {
+      _client('Sending data');
+      return dummyData;
+    });
+
+    const fileSize = 0xffffffff;
+    final file = MultipartFile(
+      'file',
+      stream.asCancelable(token, throwIfCanceled: true),
+      fileSize,
+    );
+    request.files.add(file);
+    _client('Sending multipart request');
+    await client.send(request);
+    _client('Received request');
+  } catch (e) {
+    _client('Error: $e');
+  }
+
+  _client('Done');
+  Timer(Duration(seconds: 2), () async {
+    _client('Shuting down a server');
+    await server.close();
+  });
+}
+
+void _client(String text) {
+  print('Client: $text');
 }
 
 void _server(String text) {
@@ -251,17 +177,16 @@ void _server(String text) {
 Output:
 
 ```txt
-Server: Running on http://localhost:8080
-Server: Begin request http://localhost:8080/upload
-Server: contentDisposition: form-data; name="file"; filename="__my__file.txt"
-Server: Received: 131072 (+131072)
-Server: Received: 196608 (+65536)
-Server: Received: 262144 (+65536)
-Server: Received: 393216 (+131072)
-Server: Received: 458752 (+65536)
-Server: Received: 589824 (+131072)
-Client: Canceling
+Client: Sending multipart request
+Server: Receiving request
+Server: Begin operation
+Client: Sending data
+Server: Receiving data
+Client: Sending data
+Server: Receiving data
 Client: Error: TaskCanceledException
-Server: Exception HttpException: Connection closed while receiving data, uri = /upload
-Server: End request http://localhost:8080/upload
+Client: Done
+Server: Error: HttpException: Connection closed while receiving data, uri = /
+Server: Send response
+Client: Shuting down a server
 ```
