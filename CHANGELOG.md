@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.4
+
+- Fixed a bug: The `close()` method has been implemented in the `CancelableClient` class.
+
 ## 1.1.3
 
 - Changes in the file `README.md`.

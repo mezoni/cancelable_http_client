@@ -81,4 +81,9 @@ class CancelableClient with BaseClient {
       reasonPhrase: response.reasonPhrase,
     );
   }
+
+  @override
+  void close() {
+    _client.close();
+  }
 }
