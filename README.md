@@ -2,7 +2,7 @@
 
 A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 
-Version: 1.1.4
+Version: 1.1.5
 
 [![Pub Package](https://img.shields.io/pub/v/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client)
 [![Pub Monthly Downloads](https://img.shields.io/pub/dm/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client/score)
@@ -15,7 +15,7 @@ Version: 1.1.4
 
 This software is a small library that implements the ability to cancel HTTP operations using a [Client](https://pub.dev/documentation/http/latest/http/Client-class.html) from the [http](https://pub.dev/packages/http) package.  
 This is implemented using a composition of class [Client](https://pub.dev/documentation/http/latest/http/Client-class.html) and class [CancellationToken](https://pub.dev/documentation/multitasking/latest/multitasking/CancellationToken-class.html).  
-When a cancellation request is made, the token cancels the HTTP operation.
+When a cancellation request is performed, the token cancels the HTTP operation.
 
 The result of the cancellation is the exception [TaskCanceledException](https://pub.dev/documentation/multitasking/latest/multitasking/TaskCanceledException-class.html), which indicates that the operation did not complete successfully.
 
@@ -27,7 +27,7 @@ Client-side cancellation allows to automatically cancel the following actions:
 - Sending data from the client on the server
 - (If necessary) Any action on the client that can be interrupted by throwing an exception (using `token.throwIfCanceled()`)
 
-Cancel operations do not close the client. If necessary, it must be closed forcibly.  
+Canceling an HTTP operation, do not close the client. If closing a client is mandatory (according to convention), then it must be explicitly closed using the `close()` method.  
 The client prevents a request from being sent if a cancellation request has already been made previously.  
 
 The operating algorithm is as follows.
@@ -42,63 +42,158 @@ Data transfer is performed through streams for each part independently.
 These streams must be submitted to the request as [cancelable](https://pub.dev/documentation/multitasking/latest/multitasking/StreamExtension/asCancelable.html) streams (that is, supporting the cancel operation and throwing the  `TaskCanceledException` exception).  
 Initiating a cancellation request cancels the sending of data through these streams.
 
-## Example receiving data
+## Example timeout
 
 ```dart
 import 'dart:async';
-import 'dart:convert';
+import 'dart:io';
 
 import 'package:cancelable_http_client/cancelable_http_client.dart';
-import 'package:http/http.dart';
 
-Future<void> main() async {
-  for (final timeout in [0, 50, 1000]) {
-    final cts = CancellationTokenSource();
-    final timer = Timer(Duration(milliseconds: timeout), () {
-      print('Canceling');
-      cts.cancel();
-    });
+Future<void> main(List<String> args) async {
+  final server = await HttpServer.bind('localhost', 8080);
+  final serverUrl = 'http://${server.address.host}:${server.port}';
 
-    final token = cts.token;
-    final client = CancelableClient(token);
-    final url = Uri.parse('https://pub.dev/api/package-names');
-    Response? response;
-    try {
-      response = await client.get(url);
-    } on TaskCanceledException {
-      print('Canceled');
-    } finally {
-      timer.cancel();
-    }
-
-    if (response != null) {
-      if (response.statusCode != 200) {
-        throw StateError('Http error (${response.statusCode})');
+  unawaited(() async {
+    await for (HttpRequest request in server) {
+      final response = request.response;
+      final url = request.requestedUri;
+      _server('Begin request: $url');
+      try {
+        await Future<void>.delayed(Duration(seconds: 5));
+      } catch (e) {
+        _server('Error: $e');
+      } finally {
+        _server('End request: $url');
+        await response.close();
       }
-
-      final body = response.body;
-      final map = jsonDecode(body) as Map;
-      final list = map['packages'];
-      print('First names: ${list.take(5)}');
     }
+  }());
 
-    print('-' * 40);
+  final url = Uri.parse(serverUrl);
+  const timeout = 3000;
+  final watch = Stopwatch();
+  watch.start();
+  final cts = CancellationTokenSource(Duration(milliseconds: timeout));
+  final token = cts.token;
+  final client = CancelableClient(token);
+  try {
+    _client('Send request with timeout $timeout ms');
+    await client.get(url);
+    _client('Received response');
+  } catch (e) {
+    watch.stop();
+    _client('Error: $e at ${watch.elapsedMilliseconds}');
   }
+
+  _client('Elapsed ${watch.elapsedMilliseconds} ms');
+  await Future<void>.delayed(Duration(seconds: 5));
+  await server.close();
 }
+
+void _client(String text) => print('Client: $text');
+
+void _server(String text) => print('Server: $text');
 
 ```
 
 Output:
 
 ```txt
-Canceling
-Canceled
-----------------------------------------
-Canceling
-Canceled
-----------------------------------------
-First names: (Autolinker, Babylon, DartDemoCLI, FileTeCouch, Flutter_Nectar)
-----------------------------------------
+Client: Send request with timeout 3000 ms
+Server: Begin request: http://localhost:8080/
+Client: Error: TaskCanceledException at 3009
+Client: Elapsed 3009 ms
+Server: End request: http://localhost:8080/
+```
+
+## Example receiving data
+
+```dart
+import 'dart:async';
+import 'dart:io';
+
+import 'package:cancelable_http_client/cancelable_http_client.dart';
+
+Future<void> main(List<String> args) async {
+  final server = await HttpServer.bind('localhost', 8080);
+  final serverUrl = 'http://${server.address.host}:${server.port}';
+
+  unawaited(() async {
+    await for (HttpRequest request in server) {
+      final response = request.response;
+      final url = request.requestedUri;
+      _server('Begin request: $url');
+      try {
+        response.bufferOutput = false;
+        Stream<List<int>> gen() async* {
+          const count = 100;
+          _server('Total chunks: $count');
+          var processed = 0;
+          try {
+            for (var i = 0; i < count; i++, processed++) {
+              _server('Send chunk: $i');
+              yield [i];
+              await Future<void>.delayed(Duration(seconds: 1));
+            }
+          } finally {
+            _server('Chunks sent: $processed of $count');
+          }
+        }
+
+        await response.addStream(gen());
+      } catch (e) {
+        _server('Error: $e');
+      } finally {
+        _server('End request: $url');
+        await response.close();
+      }
+    }
+  }());
+
+  final url = Uri.parse(serverUrl);
+  const timeout = 2500;
+  final watch = Stopwatch();
+  watch.start();
+  final cts = CancellationTokenSource(Duration(milliseconds: timeout));
+  final token = cts.token;
+  final client = CancelableClient(token);
+  try {
+    _client('Send request with timeout $timeout ms');
+    final response = await client.get(url);
+    cts.cancelAfter(null);
+    final bodyBytes = response.bodyBytes;
+    _client('Received response: $bodyBytes');
+  } catch (e) {
+    watch.stop();
+    _client('Error: $e at ${watch.elapsedMilliseconds}');
+  }
+
+  _client('Elapsed ${watch.elapsedMilliseconds} ms');
+  await Future<void>.delayed(Duration(seconds: 5));
+  await server.close();
+}
+
+void _client(String text) => print('Client: $text');
+
+void _server(String text) => print('Server: $text');
+
+```
+
+Output:
+
+```txt
+Client: Send request with timeout 2500 ms
+Server: Begin request: http://localhost:8080/
+Server: Total chunks: 100
+Server: Send chunk: 0
+Server: Send chunk: 1
+Server: Send chunk: 2
+Client: Error: TaskCanceledException at 2516
+Client: Elapsed 2516 ms
+Server: Send chunk: 3
+Server: End request: http://localhost:8080/
+Server: Total number of chunks sent: 3 of 100
 ```
 
 ## Example sending data
@@ -117,79 +212,87 @@ void main() async {
   unawaited(() async {
     await for (HttpRequest request in server) {
       final response = request.response;
-      _server('Receiving request');
+      final url = request.requestedUri;
+      _server('Begin request: $url');
       try {
-        _server('Begin operation');
+        var count = 0;
         await for (final _ in request) {
-          _server('Receiving data');
+          _server('Received chunk: $count');
+          count++;
         }
 
-        _server('End operation');
+        _server('Received data');
       } catch (e) {
         _server('Error: $e');
       } finally {
-        _server('Send response');
+        _server('End request: $url');
         await response.close();
       }
     }
   }());
 
-  final cts = CancellationTokenSource(Duration(seconds: 1));
+  final url = Uri.parse(serverUrl);
+  const timeout = 2500;
+  final watch = Stopwatch();
+  watch.start();
+  final cts = CancellationTokenSource(Duration(milliseconds: timeout));
   final token = cts.token;
   final client = CancelableClient(token);
   try {
-    final request = MultipartRequest("POST", Uri.parse(serverUrl));
-    const partSize = 0xffff;
-    final dummyData = List.filled(partSize, 48);
-    final stream = Stream.periodic(Duration(milliseconds: 350), (_) {
-      _client('Sending data');
-      return dummyData;
-    });
+    final request = MultipartRequest("POST", url);
+    const partSize = 65536;
+    const count = 100;
+    final part = List.filled(partSize, 48);
+    Stream<List<int>> gen() async* {
+      const count = 100;
+      _client('Total chunks: $count');
+      for (var i = 0; i < count; i++) {
+        _client('Send chunk: $i');
+        yield part;
+        await Future<void>.delayed(Duration(seconds: 1));
+      }
+    }
 
-    const fileSize = 0xffffffff;
+    const fileSize = partSize * count;
     final file = MultipartFile(
       'file',
-      stream.asCancelable(token, throwIfCanceled: true),
+      gen().asCancelable(token, throwIfCanceled: true),
       fileSize,
     );
     request.files.add(file);
-    _client('Sending multipart request');
+    _client('Sending multipart request with timeout $timeout ms');
     await client.send(request);
-    _client('Received request');
+    _client('Received response');
   } catch (e) {
     _client('Error: $e');
   }
 
-  _client('Done');
-  Timer(Duration(seconds: 2), () async {
-    _client('Shuting down a server');
-    await server.close();
-  });
+  _client('Elapsed ${watch.elapsedMilliseconds} ms');
+  await Future<void>.delayed(Duration(seconds: 5));
+  await server.close();
 }
 
-void _client(String text) {
-  print('Client: $text');
-}
+void _client(String text) => print('Client: $text');
 
-void _server(String text) {
-  print('Server: $text');
-}
+void _server(String text) => print('Server: $text');
 
 ```
 
 Output:
 
 ```txt
-Client: Sending multipart request
-Server: Receiving request
-Server: Begin operation
-Client: Sending data
-Server: Receiving data
-Client: Sending data
-Server: Receiving data
+Client: Sending multipart request with timeout 2500 ms
+Client: Total chunks: 100
+Client: Send chunk: 0
+Server: Begin request: http://localhost:8080/
+Server: Received chunk: 0
+Client: Send chunk: 1
+Server: Received chunk: 1
+Client: Send chunk: 2
+Server: Received chunk: 2
 Client: Error: TaskCanceledException
-Client: Done
+Client: Elapsed 2507 ms
 Server: Error: HttpException: Connection closed while receiving data, uri = /
-Server: Send response
-Client: Shuting down a server
+Server: End request: http://localhost:8080/
+Client: Send chunk: 3
 ```

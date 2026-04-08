@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.5
+
+- Improved tests and examples.
+
 ## 1.1.4
 
 - Fixed a bug: The `close()` method has been implemented in the `CancelableClient` class.

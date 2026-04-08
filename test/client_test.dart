@@ -50,29 +50,23 @@ void _testClient() {
     expect(error, isA<TaskCanceledException>(), reason: 'error');
     expect(clock.elapsedMilliseconds, lessThan(10000),
         reason: 'elapsedMilliseconds');
-    expect(serverPrologue, true, reason: 'serverPrologue');
-    expect(serverEpilogue, false, reason: 'serverEpilogue');
+    expect(serverPrologue, isTrue, reason: 'serverPrologue');
+    expect(serverEpilogue, isFalse, reason: 'serverEpilogue');
     await server.close();
   });
 
-  test('Client: GET', () async {
+  test('Client: Timeout', () async {
     final server = await HttpServer.bind('localhost', 8080);
     final serverUrl = 'http://${server.address.host}:${server.port}';
 
     var serverPrologue = false;
-    var serverSendingData = false;
     var serverEpilogue = false;
     unawaited(() async {
       await for (HttpRequest request in server) {
         final response = request.response;
         try {
           serverPrologue = true;
-          for (var i = 0; i < 5; i++) {
-            serverSendingData = true;
-            await Future<void>.delayed(Duration(seconds: 1));
-            response.write(i);
-          }
-
+          await Future<void>.delayed(Duration(seconds: 10));
           serverEpilogue = true;
         } catch (e) {
           //
@@ -85,18 +79,71 @@ void _testClient() {
     final cts = CancellationTokenSource(Duration(seconds: 3));
     final token = cts.token;
     final client = CancelableClient(token);
+    final watch = Stopwatch();
     Object? error;
     try {
-      await client.get(Uri.parse(serverUrl));
+      final request = Request("GET", Uri.parse(serverUrl));
+      watch.start();
+      await client.send(request);
     } catch (e) {
-      client.close();
+      watch.stop();
       error = e;
     }
 
     expect(error, isA<TaskCanceledException>(), reason: 'error');
-    expect(serverPrologue, true, reason: 'serverPrologue');
-    expect(serverSendingData, true, reason: 'serverSendingData');
-    expect(serverEpilogue, false, reason: 'serverEpilogue');
+    expect(watch.elapsedMilliseconds, lessThan(10000),
+        reason: 'elapsedMilliseconds');
+    expect(serverPrologue, isTrue, reason: 'serverPrologue');
+    expect(serverEpilogue, isFalse, reason: 'serverEpilogue');
+    await server.close();
+  });
+
+  test('Client: GET', () async {
+    final server = await HttpServer.bind('localhost', 8080);
+    final serverUrl = 'http://${server.address.host}:${server.port}';
+
+    var serverPrologue = false;
+    var serverSendingData = false;
+    var serverEpilogue = false;
+    var serverReturns = false;
+    unawaited(() async {
+      await for (HttpRequest request in server) {
+        final response = request.response;
+        try {
+          response.bufferOutput = false;
+          serverPrologue = true;
+          final stream = Stream.periodic(Duration(milliseconds: 500), (i) {
+            serverSendingData = true;
+            return [i];
+          });
+          await response.addStream(stream);
+          serverEpilogue = true;
+        } catch (e) {
+          //
+        } finally {
+          serverReturns = true;
+          await response.close();
+        }
+      }
+    }());
+
+    final cts = CancellationTokenSource(Duration(seconds: 1));
+    final token = cts.token;
+    final client = CancelableClient(token);
+    Object? error;
+    try {
+      await client.get(Uri.parse(serverUrl));
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error, isA<TaskCanceledException>(), reason: 'error');
+    expect(serverPrologue, isTrue, reason: 'serverPrologue');
+    expect(serverSendingData, isTrue, reason: 'serverSendingData');
+    expect(serverEpilogue, isFalse, reason: 'serverEpilogue');
+    await Future<void>.delayed(Duration(seconds: 2));
+    expect(serverEpilogue, isTrue, reason: 'serverEpilogue');
+    expect(serverReturns, isTrue, reason: 'serverReturns');
     await server.close();
   });
 
@@ -113,9 +160,7 @@ void _testClient() {
         final response = request.response;
         try {
           serverPrologue = true;
-          // Unused
-          // ignore: unused_local_variable
-          await for (final event in request) {
+          await for (final _ in request) {
             serverReceivingData = true;
           }
 
@@ -151,11 +196,11 @@ void _testClient() {
     }
 
     expect(error, isA<TaskCanceledException>(), reason: 'error');
-    expect(clientSendingData, true, reason: 'clientSendingData');
-    expect(serverPrologue, true, reason: 'serverPrologue');
-    expect(serverReceivingData, true, reason: 'serverReceivingData');
+    expect(clientSendingData, isTrue, reason: 'clientSendingData');
+    expect(serverPrologue, isTrue, reason: 'serverPrologue');
+    expect(serverReceivingData, isTrue, reason: 'serverReceivingData');
     await Future<void>.delayed(Duration(seconds: 1));
-    expect(serverEpilogue, false, reason: 'serverEpilogue');
+    expect(serverEpilogue, isFalse, reason: 'serverEpilogue');
     expect(serverError, isA<HttpException>(), reason: 'serverError');
     await server.close();
   });
