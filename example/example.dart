@@ -2,47 +2,44 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cancelable_http_client/cancelable_http_client.dart';
+import 'package:shelf/shelf.dart';
+import 'package:shelf/shelf_io.dart';
+import 'package:shelf_static/shelf_static.dart';
 
 Future<void> main(List<String> args) async {
-  final server = await HttpServer.bind('localhost', 8080);
+  // Test file
+  final tempDir = (await Directory.systemTemp.createTemp()).path;
+  const filename = 'test_file.txt';
+  final filepath = '$tempDir/$filename';
+  final sink = File(filepath).openWrite();
+  final chunk = List.filled(256 * 256, 48);
+  const count = 5000;
+  _client('Creating a temporary file');
+  for (var i = 0; i < count; i++) {
+    sink.add(chunk);
+  }
+
+  await sink.close();
+  _client('Test file size: ${(count * chunk.length).mb} MB');
+
+  // Server (shelf_static)
+  final staticHandler = createStaticHandler(
+    tempDir,
+    defaultDocument: 'index.html',
+    listDirectories: true,
+  );
+  final handler = const Pipeline()
+      .addMiddleware(logRequests())
+      .addMiddleware(_trackResponseStream())
+      .addHandler(staticHandler);
+  final server = await serve(handler, 'localhost', 8080);
   final serverUrl = 'http://${server.address.host}:${server.port}';
+  print('Serving at $serverUrl');
 
-  unawaited(() async {
-    await for (HttpRequest request in server) {
-      final response = request.response;
-      final url = request.requestedUri;
-      _server('Begin request: $url');
-      try {
-        response.bufferOutput = false;
-        Stream<List<int>> gen() async* {
-          const count = 100;
-          _server('Total chunks: $count');
-          var processed = 0;
-          try {
-            for (var i = 0; i < count; i++, processed++) {
-              _server('Send chunk: $i');
-              yield [i];
-              await Future<void>.delayed(Duration(seconds: 1));
-            }
-          } finally {
-            _server('Chunks sent: $processed of $count');
-          }
-        }
-
-        await response.addStream(gen());
-      } catch (e) {
-        _server('Error: $e');
-      } finally {
-        _server('End request: $url');
-        await response.close();
-      }
-    }
-  }());
-
-  final url = Uri.parse(serverUrl);
-  const timeout = 2500;
-  final watch = Stopwatch();
-  watch.start();
+  // Client
+  final url = Uri.parse('$serverUrl/$filename');
+  const timeout = 250;
+  final watch = Stopwatch()..start();
   final cts = CancellationTokenSource(Duration(milliseconds: timeout));
   final token = cts.token;
   final client = CancelableClient(token);
@@ -51,17 +48,47 @@ Future<void> main(List<String> args) async {
     final response = await client.get(url);
     cts.cancelAfter(null);
     final bodyBytes = response.bodyBytes;
-    _client('Received response: $bodyBytes');
+    _client('Received response: ${bodyBytes.length}');
   } catch (e) {
-    watch.stop();
-    _client('Error: $e at ${watch.elapsedMilliseconds}');
+    _client('Error: $e at ${watch.elapsedMilliseconds} ms');
   }
 
   _client('Elapsed ${watch.elapsedMilliseconds} ms');
-  await Future<void>.delayed(Duration(seconds: 5));
+  await Future<void>.delayed(Duration(seconds: 3));
+  _client('Deleting a temporary file');
+  File(filepath).deleteSync();
   await server.close();
 }
 
 void _client(String text) => print('Client: $text');
 
 void _server(String text) => print('Server: $text');
+
+Middleware _trackResponseStream() {
+  return (Handler innerHandler) {
+    return (Request request) async {
+      final response = await innerHandler(request);
+      var bytes = 0;
+      final streamTransformer =
+          StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleData: (data, sink) {
+          bytes += data.length;
+          sink.add(data);
+        },
+      );
+      final stream = response
+          .read()
+          .transform(streamTransformer)
+          .withSubscriptionTracking((event) {
+        _server("Send data '${event.name}': ${bytes.mb} MB");
+      });
+      return response.change(
+        body: stream,
+      );
+    };
+  };
+}
+
+extension on int {
+  String get mb => (this / 1e6).toStringAsFixed(2);
+}

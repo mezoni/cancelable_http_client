@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.6
+
+- Added example of request cancellation when using `shelf_static` server
+
 ## 1.1.5
 
 - Improved tests and examples.

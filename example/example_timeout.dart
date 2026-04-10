@@ -8,7 +8,7 @@ Future<void> main(List<String> args) async {
   final serverUrl = 'http://${server.address.host}:${server.port}';
 
   unawaited(() async {
-    await for (HttpRequest request in server) {
+    await for (final request in server) {
       final response = request.response;
       final url = request.requestedUri;
       _server('Begin request: $url');
@@ -25,8 +25,7 @@ Future<void> main(List<String> args) async {
 
   final url = Uri.parse(serverUrl);
   const timeout = 3000;
-  final watch = Stopwatch();
-  watch.start();
+  final watch = Stopwatch()..start();
   final cts = CancellationTokenSource(Duration(milliseconds: timeout));
   final token = cts.token;
   final client = CancelableClient(token);
@@ -36,8 +35,7 @@ Future<void> main(List<String> args) async {
     cts.cancelAfter(null);
     _client('Received response');
   } catch (e) {
-    watch.stop();
-    _client('Error: $e at ${watch.elapsedMilliseconds}');
+    _client('Error: $e at ${watch.elapsedMilliseconds} ms');
   }
 
   _client('Elapsed ${watch.elapsedMilliseconds} ms');

@@ -9,7 +9,7 @@ void main() async {
   final serverUrl = 'http://${server.address.host}:${server.port}';
 
   unawaited(() async {
-    await for (HttpRequest request in server) {
+    await for (final request in server) {
       final response = request.response;
       final url = request.requestedUri;
       _server('Begin request: $url');
@@ -20,7 +20,7 @@ void main() async {
           count++;
         }
 
-        _server('Received data');
+        _server('Received all data');
       } catch (e) {
         _server('Error: $e');
       } finally {
@@ -32,38 +32,34 @@ void main() async {
 
   final url = Uri.parse(serverUrl);
   const timeout = 2500;
-  final watch = Stopwatch();
-  watch.start();
+  final watch = Stopwatch()..start();
   final cts = CancellationTokenSource(Duration(milliseconds: timeout));
   final token = cts.token;
   final client = CancelableClient(token);
   try {
     final request = MultipartRequest("POST", url);
-    const partSize = 65536;
+    const chunkSize = 65536;
+    final chunk = List.filled(chunkSize, 48);
     const count = 100;
-    final part = List.filled(partSize, 48);
-    Stream<List<int>> gen() async* {
-      const count = 100;
+    Stream<List<int>> generate() async* {
       _client('Total chunks: $count');
       for (var i = 0; i < count; i++) {
         _client('Send chunk: $i');
-        yield part;
+        yield chunk;
         await Future<void>.delayed(Duration(seconds: 1));
       }
     }
 
-    const fileSize = partSize * count;
-    final file = MultipartFile(
-      'file',
-      gen().asCancelable(token, throwIfCanceled: true),
-      fileSize,
-    );
+    const fileSize = chunkSize * count;
+    final stream = generate().asCancelable(token, throwIfCanceled: true);
+    final file = MultipartFile('file', stream, fileSize);
     request.files.add(file);
     _client('Sending multipart request with timeout $timeout ms');
     await client.send(request);
+    cts.cancelAfter(null);
     _client('Received response');
   } catch (e) {
-    _client('Error: $e');
+    _client('Error: $e at ${watch.elapsedMilliseconds} ms');
   }
 
   _client('Elapsed ${watch.elapsedMilliseconds} ms');

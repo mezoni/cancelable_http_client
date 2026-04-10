@@ -2,7 +2,7 @@
 
 A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 
-Version: 1.1.5
+Version: 1.1.6
 
 [![Pub Package](https://img.shields.io/pub/v/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client)
 [![Pub Monthly Downloads](https://img.shields.io/pub/dm/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client/score)
@@ -44,6 +44,8 @@ Initiating a cancellation request cancels the sending of data through these stre
 
 ## Example timeout
 
+[example/example_timeout.dart](https://github.com/mezoni/cancelable_http_client/blob/main/example/example_timeout.dart)
+
 ```dart
 import 'dart:async';
 import 'dart:io';
@@ -55,7 +57,7 @@ Future<void> main(List<String> args) async {
   final serverUrl = 'http://${server.address.host}:${server.port}';
 
   unawaited(() async {
-    await for (HttpRequest request in server) {
+    await for (final request in server) {
       final response = request.response;
       final url = request.requestedUri;
       _server('Begin request: $url');
@@ -72,18 +74,17 @@ Future<void> main(List<String> args) async {
 
   final url = Uri.parse(serverUrl);
   const timeout = 3000;
-  final watch = Stopwatch();
-  watch.start();
+  final watch = Stopwatch()..start();
   final cts = CancellationTokenSource(Duration(milliseconds: timeout));
   final token = cts.token;
   final client = CancelableClient(token);
   try {
     _client('Send request with timeout $timeout ms');
     await client.get(url);
+    cts.cancelAfter(null);
     _client('Received response');
   } catch (e) {
-    watch.stop();
-    _client('Error: $e at ${watch.elapsedMilliseconds}');
+    _client('Error: $e at ${watch.elapsedMilliseconds} ms');
   }
 
   _client('Elapsed ${watch.elapsedMilliseconds} ms');
@@ -102,59 +103,59 @@ Output:
 ```txt
 Client: Send request with timeout 3000 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: TaskCanceledException at 3009
-Client: Elapsed 3009 ms
+Client: Error: TaskCanceledException at 3012 ms
+Client: Elapsed 3013 ms
 Server: End request: http://localhost:8080/
+
 ```
 
 ## Example receiving data
+
+[example/example.dart](https://github.com/mezoni/cancelable_http_client/blob/main/example/example.dart)
 
 ```dart
 import 'dart:async';
 import 'dart:io';
 
 import 'package:cancelable_http_client/cancelable_http_client.dart';
+import 'package:shelf/shelf.dart';
+import 'package:shelf/shelf_io.dart';
+import 'package:shelf_static/shelf_static.dart';
 
 Future<void> main(List<String> args) async {
-  final server = await HttpServer.bind('localhost', 8080);
+  // Test file
+  final tempDir = (await Directory.systemTemp.createTemp()).path;
+  const filename = 'test_file.txt';
+  final filepath = '$tempDir/$filename';
+  final sink = File(filepath).openWrite();
+  final chunk = List.filled(256 * 256, 48);
+  const count = 5000;
+  _client('Creating a temporary file');
+  for (var i = 0; i < count; i++) {
+    sink.add(chunk);
+  }
+
+  await sink.close();
+  _client('Test file size: ${(count * chunk.length).mb} MB');
+
+  // Server (shelf_static)
+  final staticHandler = createStaticHandler(
+    tempDir,
+    defaultDocument: 'index.html',
+    listDirectories: true,
+  );
+  final handler = const Pipeline()
+      .addMiddleware(logRequests())
+      .addMiddleware(_trackResponseStream())
+      .addHandler(staticHandler);
+  final server = await serve(handler, 'localhost', 8080);
   final serverUrl = 'http://${server.address.host}:${server.port}';
+  print('Serving at $serverUrl');
 
-  unawaited(() async {
-    await for (HttpRequest request in server) {
-      final response = request.response;
-      final url = request.requestedUri;
-      _server('Begin request: $url');
-      try {
-        response.bufferOutput = false;
-        Stream<List<int>> gen() async* {
-          const count = 100;
-          _server('Total chunks: $count');
-          var processed = 0;
-          try {
-            for (var i = 0; i < count; i++, processed++) {
-              _server('Send chunk: $i');
-              yield [i];
-              await Future<void>.delayed(Duration(seconds: 1));
-            }
-          } finally {
-            _server('Chunks sent: $processed of $count');
-          }
-        }
-
-        await response.addStream(gen());
-      } catch (e) {
-        _server('Error: $e');
-      } finally {
-        _server('End request: $url');
-        await response.close();
-      }
-    }
-  }());
-
-  final url = Uri.parse(serverUrl);
-  const timeout = 2500;
-  final watch = Stopwatch();
-  watch.start();
+  // Client
+  final url = Uri.parse('$serverUrl/$filename');
+  const timeout = 250;
+  final watch = Stopwatch()..start();
   final cts = CancellationTokenSource(Duration(milliseconds: timeout));
   final token = cts.token;
   final client = CancelableClient(token);
@@ -163,14 +164,15 @@ Future<void> main(List<String> args) async {
     final response = await client.get(url);
     cts.cancelAfter(null);
     final bodyBytes = response.bodyBytes;
-    _client('Received response: $bodyBytes');
+    _client('Received response: ${bodyBytes.length}');
   } catch (e) {
-    watch.stop();
-    _client('Error: $e at ${watch.elapsedMilliseconds}');
+    _client('Error: $e at ${watch.elapsedMilliseconds} ms');
   }
 
   _client('Elapsed ${watch.elapsedMilliseconds} ms');
-  await Future<void>.delayed(Duration(seconds: 5));
+  await Future<void>.delayed(Duration(seconds: 3));
+  _client('Deleting a temporary file');
+  File(filepath).deleteSync();
   await server.close();
 }
 
@@ -178,25 +180,57 @@ void _client(String text) => print('Client: $text');
 
 void _server(String text) => print('Server: $text');
 
+Middleware _trackResponseStream() {
+  return (Handler innerHandler) {
+    return (Request request) async {
+      final response = await innerHandler(request);
+      var bytes = 0;
+      final streamTransformer =
+          StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleData: (data, sink) {
+          bytes += data.length;
+          sink.add(data);
+        },
+      );
+      final stream = response
+          .read()
+          .transform(streamTransformer)
+          .withSubscriptionTracking((event) {
+        _server("Send data '${event.name}': ${bytes.mb} MB");
+      });
+      return response.change(
+        body: stream,
+      );
+    };
+  };
+}
+
+extension on int {
+  String get mb => (this / 1e6).toStringAsFixed(2);
+}
+
 ```
 
 Output:
 
 ```txt
-Client: Send request with timeout 2500 ms
-Server: Begin request: http://localhost:8080/
-Server: Total chunks: 100
-Server: Send chunk: 0
-Server: Send chunk: 1
-Server: Send chunk: 2
-Client: Error: TaskCanceledException at 2516
-Client: Elapsed 2516 ms
-Server: Send chunk: 3
-Server: End request: http://localhost:8080/
-Server: Total number of chunks sent: 3 of 100
+Client: Creating a temporary file
+Client: Test file size: 327.68 MB
+Serving at http://localhost:8080
+Client: Send request with timeout 250 ms
+2026-04-10T19:04:37.407963  0:00:00.018816 GET     [200] /test_file.txt
+Server: Send data 'start': 0.00 MB
+Client: Error: TaskCanceledException at 260 ms
+Client: Elapsed 261 ms
+Server: Send data 'pause': 9.11 MB
+Server: Send data 'cancel': 9.11 MB
+Client: Deleting a temporary file
+
 ```
 
 ## Example sending data
+
+[example/example_multipart_request.dart](https://github.com/mezoni/cancelable_http_client/blob/main/example/example_multipart_request.dart)
 
 ```dart
 import 'dart:async';
@@ -210,7 +244,7 @@ void main() async {
   final serverUrl = 'http://${server.address.host}:${server.port}';
 
   unawaited(() async {
-    await for (HttpRequest request in server) {
+    await for (final request in server) {
       final response = request.response;
       final url = request.requestedUri;
       _server('Begin request: $url');
@@ -221,7 +255,7 @@ void main() async {
           count++;
         }
 
-        _server('Received data');
+        _server('Received all data');
       } catch (e) {
         _server('Error: $e');
       } finally {
@@ -233,38 +267,34 @@ void main() async {
 
   final url = Uri.parse(serverUrl);
   const timeout = 2500;
-  final watch = Stopwatch();
-  watch.start();
+  final watch = Stopwatch()..start();
   final cts = CancellationTokenSource(Duration(milliseconds: timeout));
   final token = cts.token;
   final client = CancelableClient(token);
   try {
     final request = MultipartRequest("POST", url);
-    const partSize = 65536;
+    const chunkSize = 65536;
+    final chunk = List.filled(chunkSize, 48);
     const count = 100;
-    final part = List.filled(partSize, 48);
-    Stream<List<int>> gen() async* {
-      const count = 100;
+    Stream<List<int>> generate() async* {
       _client('Total chunks: $count');
       for (var i = 0; i < count; i++) {
         _client('Send chunk: $i');
-        yield part;
+        yield chunk;
         await Future<void>.delayed(Duration(seconds: 1));
       }
     }
 
-    const fileSize = partSize * count;
-    final file = MultipartFile(
-      'file',
-      gen().asCancelable(token, throwIfCanceled: true),
-      fileSize,
-    );
+    const fileSize = chunkSize * count;
+    final stream = generate().asCancelable(token, throwIfCanceled: true);
+    final file = MultipartFile('file', stream, fileSize);
     request.files.add(file);
     _client('Sending multipart request with timeout $timeout ms');
     await client.send(request);
+    cts.cancelAfter(null);
     _client('Received response');
   } catch (e) {
-    _client('Error: $e');
+    _client('Error: $e at ${watch.elapsedMilliseconds} ms');
   }
 
   _client('Elapsed ${watch.elapsedMilliseconds} ms');
@@ -290,9 +320,10 @@ Client: Send chunk: 1
 Server: Received chunk: 1
 Client: Send chunk: 2
 Server: Received chunk: 2
-Client: Error: TaskCanceledException
-Client: Elapsed 2507 ms
+Client: Error: TaskCanceledException at 2516 ms
+Client: Elapsed 2516 ms
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 Client: Send chunk: 3
+
 ```
