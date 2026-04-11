@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:cancelable_http_client/cancelable_http_client.dart';
 
 Future<void> main(List<String> args) async {
+  // Server
   final server = await HttpServer.bind('localhost', 8080);
   final serverUrl = 'http://${server.address.host}:${server.port}';
-
   unawaited(() async {
     await for (final request in server) {
       final response = request.response;
@@ -23,6 +23,7 @@ Future<void> main(List<String> args) async {
     }
   }());
 
+  // Client
   final url = Uri.parse(serverUrl);
   const timeout = 3000;
   final watch = Stopwatch()..start();

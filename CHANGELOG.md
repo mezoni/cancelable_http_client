@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.7
+
+- Added example file `example_streamed_request.dart`.
+- Updated dependency on `multitasking` package to version 5.4.0.
+
 ## 1.1.6
 
 - Added example of request cancellation when using `shelf_static` server

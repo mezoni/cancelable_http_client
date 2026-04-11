@@ -7,7 +7,7 @@ import 'package:shelf/shelf_io.dart';
 import 'package:shelf_static/shelf_static.dart';
 
 Future<void> main(List<String> args) async {
-  // Test file
+  // Temp file
   final tempDir = (await Directory.systemTemp.createTemp()).path;
   const filename = 'test_file.txt';
   final filepath = '$tempDir/$filename';
@@ -20,7 +20,7 @@ Future<void> main(List<String> args) async {
   }
 
   await sink.close();
-  _client('Test file size: ${(count * chunk.length).mb} MB');
+  _client('Temp file size: ${(count * chunk.length).mb} MB');
 
   // Server (shelf_static)
   final staticHandler = createStaticHandler(
@@ -57,6 +57,7 @@ Future<void> main(List<String> args) async {
   await Future<void>.delayed(Duration(seconds: 3));
   _client('Deleting a temporary file');
   File(filepath).deleteSync();
+  Directory(tempDir).deleteSync();
   await server.close();
 }
 
@@ -65,8 +66,8 @@ void _client(String text) => print('Client: $text');
 void _server(String text) => print('Server: $text');
 
 Middleware _trackResponseStream() {
-  return (Handler innerHandler) {
-    return (Request request) async {
+  return (innerHandler) {
+    return (request) async {
       final response = await innerHandler(request);
       var bytes = 0;
       final streamTransformer =

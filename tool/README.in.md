@@ -2,7 +2,7 @@
 
 A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 
-Version: 1.1.6
+Version: 1.1.7
 
 [![Pub Package](https://img.shields.io/pub/v/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client)
 [![Pub Monthly Downloads](https://img.shields.io/pub/dm/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client/score)
@@ -42,20 +42,26 @@ Data transfer is performed through streams for each part independently.
 These streams must be submitted to the request as [cancelable](https://pub.dev/documentation/multitasking/latest/multitasking/StreamExtension/asCancelable.html) streams (that is, supporting the cancel operation and throwing the  `TaskCanceledException` exception).  
 Initiating a cancellation request cancels the sending of data through these streams.
 
-## Example timeout
+## Example of sending a request with a timeout
 
 BEGIN_EXAMPLE
 example_timeout
 END_EXAMPLE
 
-## Example receiving data
+## Example of receiving data using the `GET` method
 
 BEGIN_EXAMPLE
 example
 END_EXAMPLE
 
-## Example sending data
+## Example of sending multipart data using the `POST` method
 
 BEGIN_EXAMPLE
 example_multipart_request
+END_EXAMPLE
+
+## Example of sending streamed data using the `POST` method
+
+BEGIN_EXAMPLE
+example_streamed_request
 END_EXAMPLE
