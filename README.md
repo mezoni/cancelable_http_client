@@ -104,8 +104,8 @@ Output:
 ```txt
 Client: Send request with timeout 3000 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: TaskCanceledException at 3008 ms
-Client: Elapsed 3008 ms
+Client: Error: TaskCanceledException at 3009 ms
+Client: Elapsed 3009 ms
 Server: End request: http://localhost:8080/
 
 ```
@@ -220,12 +220,12 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Serving at http://localhost:8080
 Client: Send request with timeout 250 ms
-2026-04-11T20:38:26.725084  0:00:00.018053 GET     [200] /test_file.txt
+2026-04-17T12:03:11.109883  0:00:00.020333 GET     [200] /test_file.txt
 Server: Send data 'start': 0.00 MB
-Client: Error: TaskCanceledException at 260 ms
-Client: Elapsed 261 ms
-Server: Send data 'pause': 9.24 MB
-Server: Send data 'cancel': 9.24 MB
+Client: Error: TaskCanceledException at 293 ms
+Client: Elapsed 293 ms
+Server: Send data 'pause': 9.50 MB
+Server: Send data 'cancel': 9.50 MB
 Client: Deleting a temporary file
 
 ```
@@ -294,7 +294,7 @@ void main() async {
     final request = MultipartRequest("POST", url);
     final file = File(filepath);
     // Make it possible to cancel sending data.
-    final stream = file.openRead().asCancelable(token, throwIfCanceled: true);
+    final stream = file.openRead().asCancelable(token);
     request.files.add(MultipartFile('file', stream, file.lengthSync()));
     request.headers['Content-Type'] = 'text/plain';
     _client('Sending multipart request with timeout $timeout ms');
@@ -329,9 +329,9 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Client: Sending multipart request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: TaskCanceledException at 257 ms
-Client: Elapsed 257 ms
-Server: Received: 17.76 MB
+Client: Error: TaskCanceledException at 258 ms
+Client: Elapsed 258 ms
+Server: Received: 19.27 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 
@@ -401,7 +401,7 @@ void main() async {
     final request = StreamedRequest("POST", url);
     final file = File(filepath);
     // Make it possible to cancel sending data.
-    final stream = file.openRead().asCancelable(token, throwIfCanceled: true);
+    final stream = file.openRead().asCancelable(token);
     final sink = request.sink;
     request.headers['Content-Type'] = 'text/plain';
     request.contentLength = file.lengthSync();
@@ -443,9 +443,9 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Client: Sending streaming request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: TaskCanceledException at 259 ms
-Client: Elapsed 259 ms
-Server: Received: 23.99 MB
+Client: Error: TaskCanceledException at 262 ms
+Client: Elapsed 262 ms
+Server: Received: 26.08 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 

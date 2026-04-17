@@ -187,8 +187,8 @@ void _testClient() {
         return data;
       });
 
-      final file = MultipartFile('file',
-          stream.asCancelable(token, throwIfCanceled: true), 0xffffffff);
+      final file =
+          MultipartFile('file', stream.asCancelable(token), 0xffffffff);
       request.files.add(file);
       await client.send(request);
     } catch (e) {

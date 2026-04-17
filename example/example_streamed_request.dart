@@ -57,7 +57,7 @@ void main() async {
     final request = StreamedRequest("POST", url);
     final file = File(filepath);
     // Make it possible to cancel sending data.
-    final stream = file.openRead().asCancelable(token, throwIfCanceled: true);
+    final stream = file.openRead().asCancelable(token);
     final sink = request.sink;
     request.headers['Content-Type'] = 'text/plain';
     request.contentLength = file.lengthSync();

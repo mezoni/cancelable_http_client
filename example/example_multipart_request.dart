@@ -57,7 +57,7 @@ void main() async {
     final request = MultipartRequest("POST", url);
     final file = File(filepath);
     // Make it possible to cancel sending data.
-    final stream = file.openRead().asCancelable(token, throwIfCanceled: true);
+    final stream = file.openRead().asCancelable(token);
     request.files.add(MultipartFile('file', stream, file.lengthSync()));
     request.headers['Content-Type'] = 'text/plain';
     _client('Sending multipart request with timeout $timeout ms');

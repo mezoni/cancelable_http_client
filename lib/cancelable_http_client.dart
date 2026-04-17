@@ -66,10 +66,7 @@ class CancelableClient with BaseClient {
     }
 
     final stream = response.stream;
-    final cancelableStream = stream.asCancelable(
-      _token,
-      throwIfCanceled: true,
-    );
+    final cancelableStream = stream.asCancelable(_token);
     return StreamedResponse(
       cancelableStream,
       response.statusCode,
