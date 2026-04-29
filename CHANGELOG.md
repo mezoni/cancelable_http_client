@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.0
+
+- Breaking change: The `TaskCanceledException` class has been renamed to `CancellationException`.
+- Updated dependency on `multitasking` package to version 6.0.0.
+
 ## 1.1.7
 
 - Added example file `example_streamed_request.dart`.

@@ -47,7 +47,7 @@ void _testClient() {
       error = e;
     }
 
-    expect(error, isA<TaskCanceledException>(), reason: 'error');
+    expect(error, isA<CancellationException>(), reason: 'error');
     expect(clock.elapsedMilliseconds, lessThan(10000),
         reason: 'elapsedMilliseconds');
     expect(serverPrologue, isTrue, reason: 'serverPrologue');
@@ -90,7 +90,7 @@ void _testClient() {
       error = e;
     }
 
-    expect(error, isA<TaskCanceledException>(), reason: 'error');
+    expect(error, isA<CancellationException>(), reason: 'error');
     expect(watch.elapsedMilliseconds, lessThan(10000),
         reason: 'elapsedMilliseconds');
     expect(serverPrologue, isTrue, reason: 'serverPrologue');
@@ -137,7 +137,7 @@ void _testClient() {
       error = e;
     }
 
-    expect(error, isA<TaskCanceledException>(), reason: 'error');
+    expect(error, isA<CancellationException>(), reason: 'error');
     expect(serverPrologue, isTrue, reason: 'serverPrologue');
     expect(serverSendingData, isTrue, reason: 'serverSendingData');
     expect(serverEpilogue, isFalse, reason: 'serverEpilogue');
@@ -195,7 +195,7 @@ void _testClient() {
       error = e;
     }
 
-    expect(error, isA<TaskCanceledException>(), reason: 'error');
+    expect(error, isA<CancellationException>(), reason: 'error');
     expect(clientSendingData, isTrue, reason: 'clientSendingData');
     expect(serverPrologue, isTrue, reason: 'serverPrologue');
     expect(serverReceivingData, isTrue, reason: 'serverReceivingData');

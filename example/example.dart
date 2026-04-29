@@ -69,25 +69,35 @@ Middleware _trackResponseStream() {
   return (innerHandler) {
     return (request) async {
       final response = await innerHandler(request);
-      var bytes = 0;
-      final streamTransformer =
-          StreamTransformer<List<int>, List<int>>.fromHandlers(
-        handleData: (data, sink) {
-          bytes += data.length;
-          sink.add(data);
-        },
-      );
-      final stream = response
-          .read()
-          .transform(streamTransformer)
-          .withSubscriptionTracking((event) {
-        _server("Send data '${event.name}': ${bytes.mb} MB");
-      });
+      final stream = response.read().transform(_Tracker());
       return response.change(
         body: stream,
       );
     };
   };
+}
+
+class _Tracker extends StreamTransformerBase<List<int>, List<int>> {
+  @override
+  Stream<List<int>> bind(Stream<List<int>> stream) {
+    return () async* {
+      var state = 'Canceled';
+      var sent = 0;
+      try {
+        await for (final event in stream) {
+          sent += event.length;
+          yield event;
+        }
+
+        state = 'Done';
+      } catch (e) {
+        state = 'Error';
+        rethrow;
+      } finally {
+        _server('$state: Sent: ${sent.mb} MB');
+      }
+    }();
+  }
 }
 
 extension on int {

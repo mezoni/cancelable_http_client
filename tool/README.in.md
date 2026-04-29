@@ -2,7 +2,7 @@
 
 A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 
-Version: 1.1.7
+Version: 2.0.0
 
 [![Pub Package](https://img.shields.io/pub/v/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client)
 [![Pub Monthly Downloads](https://img.shields.io/pub/dm/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client/score)
@@ -17,7 +17,7 @@ This software is a small library that implements the ability to cancel HTTP oper
 This is implemented using a composition of class [Client](https://pub.dev/documentation/http/latest/http/Client-class.html) and class [CancellationToken](https://pub.dev/documentation/multitasking/latest/multitasking/CancellationToken-class.html).  
 When a cancellation request is performed, the token cancels the HTTP operation.
 
-The result of the cancellation is the exception [TaskCanceledException](https://pub.dev/documentation/multitasking/latest/multitasking/TaskCanceledException-class.html), which indicates that the operation did not complete successfully.
+The result of the cancellation is the exception [CancellationException](https://pub.dev/documentation/multitasking/latest/multitasking/CancellationException-class.html), which indicates that the operation did not complete successfully.
 
 Canceling an HTTP operation on the client does not mean cancelling the operation on the server.  
 
@@ -39,7 +39,7 @@ If a cancellation request is initiated after a response is received from the ser
 **Sending multipart data to the server.**  
 Before sending a request, the client prepares the data to be sent.  
 Data transfer is performed through streams for each part independently.  
-These streams must be submitted to the request as [cancelable](https://pub.dev/documentation/multitasking/latest/multitasking/StreamExtension/asCancelable.html) streams (that is, supporting the cancel operation and throwing the  `TaskCanceledException` exception).  
+These streams must be submitted to the request as [cancelable](https://pub.dev/documentation/multitasking/latest/multitasking/StreamExtension/asCancelable.html) streams (that is, supporting the cancel operation and throwing the  `CancellationException` exception).  
 Initiating a cancellation request cancels the sending of data through these streams.
 
 ## Example of sending a request with a timeout

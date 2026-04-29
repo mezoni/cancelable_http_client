@@ -2,7 +2,7 @@
 
 A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 
-Version: 1.1.7
+Version: 2.0.0
 
 [![Pub Package](https://img.shields.io/pub/v/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client)
 [![Pub Monthly Downloads](https://img.shields.io/pub/dm/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client/score)
@@ -17,7 +17,7 @@ This software is a small library that implements the ability to cancel HTTP oper
 This is implemented using a composition of class [Client](https://pub.dev/documentation/http/latest/http/Client-class.html) and class [CancellationToken](https://pub.dev/documentation/multitasking/latest/multitasking/CancellationToken-class.html).  
 When a cancellation request is performed, the token cancels the HTTP operation.
 
-The result of the cancellation is the exception [TaskCanceledException](https://pub.dev/documentation/multitasking/latest/multitasking/TaskCanceledException-class.html), which indicates that the operation did not complete successfully.
+The result of the cancellation is the exception [CancellationException](https://pub.dev/documentation/multitasking/latest/multitasking/CancellationException-class.html), which indicates that the operation did not complete successfully.
 
 Canceling an HTTP operation on the client does not mean cancelling the operation on the server.  
 
@@ -39,7 +39,7 @@ If a cancellation request is initiated after a response is received from the ser
 **Sending multipart data to the server.**  
 Before sending a request, the client prepares the data to be sent.  
 Data transfer is performed through streams for each part independently.  
-These streams must be submitted to the request as [cancelable](https://pub.dev/documentation/multitasking/latest/multitasking/StreamExtension/asCancelable.html) streams (that is, supporting the cancel operation and throwing the  `TaskCanceledException` exception).  
+These streams must be submitted to the request as [cancelable](https://pub.dev/documentation/multitasking/latest/multitasking/StreamExtension/asCancelable.html) streams (that is, supporting the cancel operation and throwing the  `CancellationException` exception).  
 Initiating a cancellation request cancels the sending of data through these streams.
 
 ## Example of sending a request with a timeout
@@ -104,8 +104,8 @@ Output:
 ```txt
 Client: Send request with timeout 3000 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: TaskCanceledException at 3009 ms
-Client: Elapsed 3009 ms
+Client: Error: CancellationException at 3007 ms
+Client: Elapsed 3007 ms
 Server: End request: http://localhost:8080/
 
 ```
@@ -186,25 +186,35 @@ Middleware _trackResponseStream() {
   return (innerHandler) {
     return (request) async {
       final response = await innerHandler(request);
-      var bytes = 0;
-      final streamTransformer =
-          StreamTransformer<List<int>, List<int>>.fromHandlers(
-        handleData: (data, sink) {
-          bytes += data.length;
-          sink.add(data);
-        },
-      );
-      final stream = response
-          .read()
-          .transform(streamTransformer)
-          .withSubscriptionTracking((event) {
-        _server("Send data '${event.name}': ${bytes.mb} MB");
-      });
+      final stream = response.read().transform(_Tracker());
       return response.change(
         body: stream,
       );
     };
   };
+}
+
+class _Tracker extends StreamTransformerBase<List<int>, List<int>> {
+  @override
+  Stream<List<int>> bind(Stream<List<int>> stream) {
+    return () async* {
+      var state = 'Canceled';
+      var sent = 0;
+      try {
+        await for (final event in stream) {
+          sent += event.length;
+          yield event;
+        }
+
+        state = 'Done';
+      } catch (e) {
+        state = 'Error';
+        rethrow;
+      } finally {
+        _server('$state: Sent: ${sent.mb} MB');
+      }
+    }();
+  }
 }
 
 extension on int {
@@ -220,12 +230,10 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Serving at http://localhost:8080
 Client: Send request with timeout 250 ms
-2026-04-17T12:03:11.109883  0:00:00.020333 GET     [200] /test_file.txt
-Server: Send data 'start': 0.00 MB
-Client: Error: TaskCanceledException at 293 ms
-Client: Elapsed 293 ms
-Server: Send data 'pause': 9.50 MB
-Server: Send data 'cancel': 9.50 MB
+2026-04-29T23:05:56.756687  0:00:00.031417 GET     [200] /test_file.txt
+Client: Error: CancellationException at 306 ms
+Client: Elapsed 306 ms
+Server: Canceled: Sent: 9.37 MB
 Client: Deleting a temporary file
 
 ```
@@ -329,9 +337,9 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Client: Sending multipart request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: TaskCanceledException at 258 ms
-Client: Elapsed 258 ms
-Server: Received: 19.27 MB
+Client: Error: CancellationException at 260 ms
+Client: Elapsed 260 ms
+Server: Received: 21.10 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 
@@ -443,9 +451,9 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Client: Sending streaming request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: TaskCanceledException at 262 ms
-Client: Elapsed 262 ms
-Server: Received: 26.08 MB
+Client: Error: CancellationException at 258 ms
+Client: Elapsed 259 ms
+Server: Received: 25.49 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 

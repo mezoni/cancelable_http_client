@@ -5,10 +5,10 @@ import 'package:multitasking/multitasking.dart';
 
 export 'package:multitasking/multitasking.dart'
     show
+        CancellationException,
         CancellationToken,
         CancellationTokenSource,
-        StreamExtension,
-        TaskCanceledException;
+        StreamExtension;
 
 /// A [CancelableClient] is a wrapper over [Client] that allows to cancel both a
 /// request and the operation of receiving data from the response stream.
@@ -17,7 +17,7 @@ export 'package:multitasking/multitasking.dart'
 /// When a cancellation requested, the token cancels either the request
 /// (receiving a response) or receiving data from the response stream.
 ///
-/// If a cancellation occurs, the [TaskCanceledException] exception is thrown.
+/// If a cancellation occurs, the [CancellationException] exception is thrown.
 ///
 /// Request cancellation is implemented by ignoring the cancelled connection
 /// establishment.
@@ -36,10 +36,15 @@ class CancelableClient with BaseClient {
   ///
   /// Parameters:
   ///
-  /// - [token]: Cancellation token to signal a cancellation request
+  /// - [token]: Cancellation token to signal a cancellation request.
   CancelableClient(CancellationToken token)
       : _client = Client(),
         _token = token;
+
+  @override
+  void close() {
+    _client.close();
+  }
 
   @override
   Future<StreamedResponse> send(BaseRequest request) async {
@@ -48,7 +53,7 @@ class CancelableClient with BaseClient {
     StreamedResponse response;
     try {
       response = await task.withCancellation(_token);
-    } on TaskCanceledException {
+    } on CancellationException {
       // Ignore the cancelled operation.
       unawaited(() async {
         try {
@@ -56,7 +61,7 @@ class CancelableClient with BaseClient {
           final response = await task;
           final stream = response.stream;
           // Notify the server to cancel the data transfer.
-          await stream.listen((_) {}).cancel();
+          await stream.listen(null).cancel();
         } catch (e) {
           // Ignore exception
         }
@@ -77,10 +82,5 @@ class CancelableClient with BaseClient {
       persistentConnection: response.persistentConnection,
       reasonPhrase: response.reasonPhrase,
     );
-  }
-
-  @override
-  void close() {
-    _client.close();
   }
 }
