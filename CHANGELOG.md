@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.0
+
+- Updated dependency on `multitasking` package to version 7.2.0.
+
 ## 2.0.0
 
 - Breaking change: The `TaskCanceledException` class has been renamed to `CancellationException`.

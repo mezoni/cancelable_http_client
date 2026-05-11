@@ -2,7 +2,7 @@
 
 A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 
-Version: 2.0.0
+Version: 2.1.0
 
 [![Pub Package](https://img.shields.io/pub/v/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client)
 [![Pub Monthly Downloads](https://img.shields.io/pub/dm/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client/score)
@@ -102,11 +102,18 @@ void _server(String text) => print('Server: $text');
 Output:
 
 ```txt
-Client: Send request with timeout 3000 ms
-Server: Begin request: http://localhost:8080/
-Client: Error: CancellationException at 3007 ms
-Client: Elapsed 3007 ms
-Server: End request: http://localhost:8080/
+Unhandled exception:
+SocketException: Failed to create server socket (OS Error: Address already in use, errno = 98), address = localhost, port = 8080
+#0      _NativeSocket.bind (dart:io-patch/socket_patch.dart:1216:7)
+<asynchronous suspension>
+#1      _RawServerSocket.bind.<anonymous closure> (dart:io-patch/socket_patch.dart:2163:12)
+<asynchronous suspension>
+#2      _ServerSocket.bind.<anonymous closure> (dart:io-patch/socket_patch.dart:2483:12)
+<asynchronous suspension>
+#3      _HttpServer.bind.<anonymous closure> (dart:_http/http_impl.dart:3472:24)
+<asynchronous suspension>
+#4      main (file:///home/andrew/prj/cancelable_http_client/example/example_timeout.dart:8:18)
+<asynchronous suspension>
 
 ```
 
@@ -230,10 +237,10 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Serving at http://localhost:8080
 Client: Send request with timeout 250 ms
-2026-04-29T23:05:56.756687  0:00:00.031417 GET     [200] /test_file.txt
-Client: Error: CancellationException at 306 ms
-Client: Elapsed 306 ms
-Server: Canceled: Sent: 9.37 MB
+2026-05-11T21:39:05.669771  0:00:00.019819 GET     [200] /test_file.txt
+Client: Error: CancellationException at 261 ms
+Client: Elapsed 261 ms
+Server: Canceled: Sent: 11.47 MB
 Client: Deleting a temporary file
 
 ```
@@ -337,9 +344,9 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Client: Sending multipart request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: CancellationException at 260 ms
-Client: Elapsed 260 ms
-Server: Received: 21.10 MB
+Client: Error: CancellationException at 315 ms
+Client: Elapsed 317 ms
+Server: Received: 27.66 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 
@@ -451,9 +458,9 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Client: Sending streaming request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: CancellationException at 258 ms
-Client: Elapsed 259 ms
-Server: Received: 25.49 MB
+Client: Error: CancellationException at 257 ms
+Client: Elapsed 258 ms
+Server: Received: 20.84 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 

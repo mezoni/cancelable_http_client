@@ -1,5 +1,5 @@
 name: cancelable_http_client
-version: 2.0.0
+version: 2.1.0
 description: A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 homepage: https://github.com/mezoni/cancelable_http_client
 topics:
@@ -12,7 +12,7 @@ environment:
   sdk: '>=3.0.0 <4.0.0'
 dependencies:
   http: ^1.6.0
-  multitasking: ^6.0.0
+  multitasking: ^7.2.0
 dev_dependencies:
   lints: ^6.1.0
   mime: ^2.0.0
