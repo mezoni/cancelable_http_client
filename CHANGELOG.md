@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.0
+
+- The `pauseToken` parameter has been added to the `CancelableClient` class constructor.
+- The `requestTimeout` parameter has been added to the `CancelableClient` class constructor.
+- The `responseTimeout` parameter has been added to the `CancelableClient` class constructor.
+- Updated dependency on `multitasking` package to version 7.3.0.
+
 ## 2.1.0
 
 - Updated dependency on `multitasking` package to version 7.2.0.

@@ -2,7 +2,7 @@
 
 A cancelable HTTP client is a wrapper over `http.Client` that allows to cancel a request or the operation of receiving data from the response or sending data via request.
 
-Version: 2.1.0
+Version: 2.2.0
 
 [![Pub Package](https://img.shields.io/pub/v/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client)
 [![Pub Monthly Downloads](https://img.shields.io/pub/dm/cancelable_http_client.svg)](https://pub.dev/packages/cancelable_http_client/score)
@@ -42,9 +42,15 @@ Data transfer is performed through streams for each part independently.
 These streams must be submitted to the request as [cancelable](https://pub.dev/documentation/multitasking/latest/multitasking/StreamExtension/asCancelable.html) streams (that is, supporting the cancel operation and throwing the  `CancellationException` exception).  
 Initiating a cancellation request cancels the sending of data through these streams.
 
-## Example of sending a request with a timeout
+**Additional features:**
 
-[example/example_timeout.dart](https://github.com/mezoni/cancelable_http_client/blob/main/example/example_timeout.dart)
+- Pausing and resuming data reception using a pause token
+- Canceling a request before receiving data using the `requestTimeout` parameter
+- Canceling data retrieval using the `responseTimeout` parameter
+
+## Example of canceling 'GET' request
+
+[example/example_cancel_get_request.dart](https://github.com/mezoni/cancelable_http_client/blob/main/example/example_cancel_get_request.dart)
 
 ```dart
 import 'dart:async';
@@ -102,18 +108,225 @@ void _server(String text) => print('Server: $text');
 Output:
 
 ```txt
-Unhandled exception:
-SocketException: Failed to create server socket (OS Error: Address already in use, errno = 98), address = localhost, port = 8080
-#0      _NativeSocket.bind (dart:io-patch/socket_patch.dart:1216:7)
-<asynchronous suspension>
-#1      _RawServerSocket.bind.<anonymous closure> (dart:io-patch/socket_patch.dart:2163:12)
-<asynchronous suspension>
-#2      _ServerSocket.bind.<anonymous closure> (dart:io-patch/socket_patch.dart:2483:12)
-<asynchronous suspension>
-#3      _HttpServer.bind.<anonymous closure> (dart:_http/http_impl.dart:3472:24)
-<asynchronous suspension>
-#4      main (file:///home/andrew/prj/cancelable_http_client/example/example_timeout.dart:8:18)
-<asynchronous suspension>
+Client: Send request with timeout 3000 ms
+Server: Begin request: http://localhost:8080/
+Client: Error: CancellationException at 3010 ms
+Client: Elapsed 3012 ms
+Server: End request: http://localhost:8080/
+
+```
+
+## Example of canceling 'GET' request using `requestTimeout` parameter
+
+[example/example_cancel_get_request_using_request_timeout.dart](https://github.com/mezoni/cancelable_http_client/blob/main/example/example_cancel_get_request_using_request_timeout.dart)
+
+```dart
+import 'dart:async';
+import 'dart:io';
+
+import 'package:cancelable_http_client/cancelable_http_client.dart';
+
+Future<void> main(List<String> args) async {
+  // Server
+  final server = await HttpServer.bind('localhost', 8080);
+  final serverUrl = 'http://${server.address.host}:${server.port}';
+  unawaited(() async {
+    await for (final request in server) {
+      final response = request.response;
+      final url = request.requestedUri;
+      _server('Begin request: $url');
+      try {
+        _server('Request delay 5 sec');
+        await Future<void>.delayed(Duration(seconds: 5));
+        response.add([1, 2, 3]);
+      } catch (e) {
+        _server('Error: $e');
+      } finally {
+        _server('End request: $url');
+        await response.close();
+      }
+    }
+  }());
+
+  // Client
+  final url = Uri.parse(serverUrl);
+  const timeout = 3000;
+  final watch = Stopwatch()..start();
+  final cts = CancellationTokenSource();
+  final token = cts.token;
+  final client = CancelableClient(
+    token,
+    requestTimeout: Duration(milliseconds: timeout),
+  );
+  try {
+    _client('Send request with request timeout $timeout ms');
+    await client.get(url);
+    cts.cancelAfter(null);
+    _client('Received response');
+  } catch (e) {
+    _client('Error: $e at ${watch.elapsedMilliseconds} ms');
+  }
+
+  _client('Elapsed ${watch.elapsedMilliseconds} ms');
+  await Future<void>.delayed(Duration(seconds: 5));
+  await server.close();
+}
+
+void _client(String text) => print('Client: $text');
+
+void _server(String text) => print('Server: $text');
+
+```
+
+Output:
+
+```txt
+Client: Send request with request timeout 3000 ms
+Server: Begin request: http://localhost:8080/
+Server: Request delay 5 sec
+Client: Error: TimeoutException:  at 3043 ms
+Client: Elapsed 3043 ms
+Server: End request: http://localhost:8080/
+
+```
+
+## Example of canceling 'GET' request using `responseTimeout` parameter
+
+[example/example_cancel_get_request_using_response_timeout.dart](https://github.com/mezoni/cancelable_http_client/blob/main/example/example_cancel_get_request_using_response_timeout.dart)
+
+```dart
+import 'dart:async';
+import 'dart:io';
+
+import 'package:cancelable_http_client/cancelable_http_client.dart';
+import 'package:shelf/shelf.dart';
+import 'package:shelf/shelf_io.dart';
+import 'package:shelf_static/shelf_static.dart';
+
+Future<void> main(List<String> args) async {
+  // Temp file
+  final tempDir = (await Directory.systemTemp.createTemp()).path;
+  const filename = 'test_file.txt';
+  final filepath = '$tempDir/$filename';
+  final sink = File(filepath).openWrite();
+  final chunk = List.filled(256 * 256, 48);
+  const count = 5000;
+  _client('Creating a temporary file');
+  for (var i = 0; i < count; i++) {
+    sink.add(chunk);
+  }
+
+  await sink.close();
+  _client('Temp file size: ${(count * chunk.length).mb} MB');
+
+  // Server (shelf_static)
+  final staticHandler = createStaticHandler(
+    tempDir,
+    defaultDocument: 'index.html',
+    listDirectories: true,
+  );
+  final handler = const Pipeline()
+      .addMiddleware(logRequests())
+      .addMiddleware(_trackResponseStream())
+      .addHandler(staticHandler);
+  final server = await serve(handler, 'localhost', 8080);
+  final serverUrl = 'http://${server.address.host}:${server.port}';
+  print('Serving at $serverUrl');
+
+  // Client
+  final url = Uri.parse('$serverUrl/$filename');
+  const timeout = 2000;
+  final watch = Stopwatch()..start();
+  final cts = CancellationTokenSource();
+  final token = cts.token;
+  final client = CancelableClient(
+    token,
+    responseTimeout: Duration(seconds: 2),
+  );
+  try {
+    _client('Send request with response timeout $timeout ms');
+    final response = await client.get(url);
+    final bodyBytes = response.bodyBytes;
+    _client('Received response: ${bodyBytes.length}');
+  } catch (e) {
+    _client('Error: $e at ${watch.elapsedMilliseconds} ms');
+  }
+
+  _client('Elapsed ${watch.elapsedMilliseconds} ms');
+  await Future<void>.delayed(Duration(seconds: 3));
+  _client('Deleting a temporary file');
+  File(filepath).deleteSync();
+  Directory(tempDir).deleteSync();
+  await server.close();
+}
+
+void _client(String text) => print('Client: $text');
+
+void _server(String text) => print('Server: $text');
+
+Middleware _trackResponseStream() {
+  return (innerHandler) {
+    return (request) async {
+      final response = await innerHandler(request);
+      final stream = response.read().transform(_Tracker());
+      return response.change(
+        body: stream,
+      );
+    };
+  };
+}
+
+class _Tracker extends StreamTransformerBase<List<int>, List<int>> {
+  @override
+  Stream<List<int>> bind(Stream<List<int>> stream) {
+    return () async* {
+      var delay = 0;
+      var state = 'Canceled';
+      var sent = 0;
+      try {
+        _server('Request delay 3 sec');
+        await Future<void>.delayed(Duration(seconds: 3));
+        await for (final event in stream) {
+          sent += event.length;
+          _server('Send data with delay $delay sec');
+          await Future<void>.delayed(Duration(seconds: delay++));
+          yield event;
+        }
+
+        state = 'Done';
+      } catch (e) {
+        state = 'Error';
+        rethrow;
+      } finally {
+        _server('$state: Sent: ${sent.mb} MB');
+      }
+    }();
+  }
+}
+
+extension on int {
+  String get mb => (this / 1e6).toStringAsFixed(2);
+}
+
+```
+
+Output:
+
+```txt
+Client: Creating a temporary file
+Client: Temp file size: 327.68 MB
+Serving at http://localhost:8080
+Client: Send request with response timeout 2000 ms
+2026-05-13T22:45:12.674854  0:00:00.020448 GET     [200] /test_file.txt
+Server: Request delay 3 sec
+Server: Send data with delay 0 sec
+Server: Send data with delay 1 sec
+Server: Send data with delay 2 sec
+Client: Error: TimeoutException at 6176 ms
+Client: Elapsed 6177 ms
+Server: Send data with delay 3 sec
+Client: Deleting a temporary file
+Server: Canceled: Sent: 0.26 MB
 
 ```
 
@@ -237,10 +450,10 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Serving at http://localhost:8080
 Client: Send request with timeout 250 ms
-2026-05-11T21:39:05.669771  0:00:00.019819 GET     [200] /test_file.txt
-Client: Error: CancellationException at 261 ms
-Client: Elapsed 261 ms
-Server: Canceled: Sent: 11.47 MB
+2026-05-13T22:45:27.869646  0:00:00.037851 GET     [200] /test_file.txt
+Client: Error: CancellationException at 263 ms
+Client: Elapsed 264 ms
+Server: Canceled: Sent: 3.54 MB
 Client: Deleting a temporary file
 
 ```
@@ -344,9 +557,9 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Client: Sending multipart request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: CancellationException at 315 ms
-Client: Elapsed 317 ms
-Server: Received: 27.66 MB
+Client: Error: CancellationException at 259 ms
+Client: Elapsed 259 ms
+Server: Received: 16.32 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 
@@ -458,9 +671,9 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Client: Sending streaming request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: CancellationException at 257 ms
-Client: Elapsed 258 ms
-Server: Received: 20.84 MB
+Client: Error: CancellationException at 259 ms
+Client: Elapsed 259 ms
+Server: Received: 17.50 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 
