@@ -110,8 +110,8 @@ Output:
 ```txt
 Client: Send request with timeout 3000 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: CancellationException at 3010 ms
-Client: Elapsed 3012 ms
+Client: Error: CancellationException at 3009 ms
+Client: Elapsed 3009 ms
 Server: End request: http://localhost:8080/
 
 ```
@@ -184,8 +184,8 @@ Output:
 Client: Send request with request timeout 3000 ms
 Server: Begin request: http://localhost:8080/
 Server: Request delay 5 sec
-Client: Error: TimeoutException:  at 3043 ms
-Client: Elapsed 3043 ms
+Client: Error: TimeoutException:  at 3044 ms
+Client: Elapsed 3045 ms
 Server: End request: http://localhost:8080/
 
 ```
@@ -317,13 +317,13 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Serving at http://localhost:8080
 Client: Send request with response timeout 2000 ms
-2026-05-13T22:45:12.674854  0:00:00.020448 GET     [200] /test_file.txt
+2026-05-17T18:28:29.814422  0:00:00.018284 GET     [200] /test_file.txt
 Server: Request delay 3 sec
 Server: Send data with delay 0 sec
 Server: Send data with delay 1 sec
 Server: Send data with delay 2 sec
-Client: Error: TimeoutException at 6176 ms
-Client: Elapsed 6177 ms
+Client: Error: TimeoutException at 6145 ms
+Client: Elapsed 6145 ms
 Server: Send data with delay 3 sec
 Client: Deleting a temporary file
 Server: Canceled: Sent: 0.26 MB
@@ -450,10 +450,10 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Serving at http://localhost:8080
 Client: Send request with timeout 250 ms
-2026-05-13T22:45:27.869646  0:00:00.037851 GET     [200] /test_file.txt
-Client: Error: CancellationException at 263 ms
-Client: Elapsed 264 ms
-Server: Canceled: Sent: 3.54 MB
+2026-05-17T18:28:44.568318  0:00:00.021840 GET     [200] /test_file.txt
+Client: Error: CancellationException at 259 ms
+Client: Elapsed 259 ms
+Server: Canceled: Sent: 10.42 MB
 Client: Deleting a temporary file
 
 ```
@@ -559,7 +559,7 @@ Client: Sending multipart request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
 Client: Error: CancellationException at 259 ms
 Client: Elapsed 259 ms
-Server: Received: 16.32 MB
+Server: Received: 19.53 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
 
@@ -671,10 +671,167 @@ Client: Creating a temporary file
 Client: Temp file size: 327.68 MB
 Client: Sending streaming request with timeout 250 ms
 Server: Begin request: http://localhost:8080/
-Client: Error: CancellationException at 259 ms
+Client: Error: CancellationException at 258 ms
 Client: Elapsed 259 ms
-Server: Received: 17.50 MB
+Server: Received: 24.97 MB
 Server: Error: HttpException: Connection closed while receiving data, uri = /
 Server: End request: http://localhost:8080/
+
+```
+
+## Example of pausing data retrieval using the `GET` method
+
+[example/example_pause_get_request.dart](https://github.com/mezoni/cancelable_http_client/blob/main/example/example_pause_get_request.dart)
+
+```dart
+import 'dart:async';
+import 'dart:io';
+
+import 'package:cancelable_http_client/cancelable_http_client.dart';
+import 'package:multitasking/misc/pause.dart';
+import 'package:shelf/shelf.dart';
+import 'package:shelf/shelf_io.dart';
+import 'package:shelf_static/shelf_static.dart';
+
+Future<void> main(List<String> args) async {
+  // Temp file
+  final tempDir = (await Directory.systemTemp.createTemp()).path;
+  const filename = 'test_file.txt';
+  final filepath = '$tempDir/$filename';
+  final sink = File(filepath).openWrite();
+  final chunk = List.filled(256 * 256, 48);
+  const count = 5000;
+  _client('Creating a temporary file');
+  for (var i = 0; i < count; i++) {
+    sink.add(chunk);
+  }
+
+  await sink.close();
+  _client('Temp file size: ${(count * chunk.length).mb} MB');
+
+  // Server (shelf_static)
+  final staticHandler = createStaticHandler(
+    tempDir,
+    defaultDocument: 'index.html',
+    listDirectories: true,
+  );
+  final handler = const Pipeline()
+      .addMiddleware(logRequests())
+      .addMiddleware(_trackResponseStream())
+      .addHandler(staticHandler);
+  final server = await serve(handler, 'localhost', 8080);
+  final serverUrl = 'http://${server.address.host}:${server.port}';
+  print('Serving at $serverUrl');
+
+  // Client
+  final url = Uri.parse('$serverUrl/$filename');
+  const timeout = 5500;
+  final watch = Stopwatch()..start();
+  final cts = CancellationTokenSource();
+  final pts = PauseTokenSource();
+  final client = CancelableClient(
+    cts.token,
+    pauseToken: pts.token,
+    responseTimeout: Duration(milliseconds: timeout),
+  );
+
+  Timer(Duration(seconds: 5), () async {
+    _client('Pause 6 sec, longer than timeout');
+    await pts.pause();
+    Timer(Duration(seconds: 6), () async {
+      _client('Resume aster 6 sec');
+      await pts.resume();
+    });
+  });
+
+  try {
+    _client('Send request with response timeout $timeout ms');
+    final response = await client.get(url);
+    final bodyBytes = response.bodyBytes;
+    _client('Received response: ${bodyBytes.length}');
+  } catch (e) {
+    _client('Error: $e at ${watch.elapsedMilliseconds} ms');
+  }
+
+  _client('Elapsed ${watch.elapsedMilliseconds} ms');
+  await Future<void>.delayed(Duration(seconds: 3));
+  _client('Deleting a temporary file');
+  File(filepath).deleteSync();
+  Directory(tempDir).deleteSync();
+  await server.close();
+}
+
+void _client(String text) => print('Client: $text');
+
+void _server(String text) => print('Server: $text');
+
+Middleware _trackResponseStream() {
+  return (innerHandler) {
+    return (request) async {
+      final response = await innerHandler(request);
+      final stream = response.read().transform(_Tracker());
+      return response.change(
+        body: stream,
+      );
+    };
+  };
+}
+
+class _Tracker extends StreamTransformerBase<List<int>, List<int>> {
+  @override
+  Stream<List<int>> bind(Stream<List<int>> stream) {
+    return () async* {
+      var delay = 0;
+      var state = 'Canceled';
+      var sent = 0;
+      try {
+        await Future<void>.delayed(Duration(seconds: 3));
+        await for (final event in stream) {
+          sent += event.length;
+          _server('Delay $delay sec');
+          await Future<void>.delayed(Duration(seconds: delay));
+          yield event;
+          delay++;
+        }
+
+        state = 'Done';
+      } catch (e) {
+        state = 'Error';
+        rethrow;
+      } finally {
+        _server('$state: Sent: ${sent.mb} MB');
+      }
+    }();
+  }
+}
+
+extension on int {
+  String get mb => (this / 1e6).toStringAsFixed(2);
+}
+
+```
+
+Output:
+
+```txt
+Client: Creating a temporary file
+Client: Temp file size: 327.68 MB
+Serving at http://localhost:8080
+Client: Send request with response timeout 5500 ms
+2026-05-17T18:29:13.966317  0:00:00.020501 GET     [200] /test_file.txt
+Server: Delay 0 sec
+Server: Delay 1 sec
+Server: Delay 2 sec
+Client: Pause 6 sec, longer than timeout
+Server: Delay 3 sec
+Server: Delay 4 sec
+Client: Resume aster 6 sec
+Server: Delay 5 sec
+Server: Delay 6 sec
+Client: Error: TimeoutException at 23664 ms
+Client: Elapsed 23664 ms
+Server: Delay 7 sec
+Client: Deleting a temporary file
+Server: Canceled: Sent: 0.52 MB
 
 ```

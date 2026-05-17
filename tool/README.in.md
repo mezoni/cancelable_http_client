@@ -83,3 +83,9 @@ END_EXAMPLE
 BEGIN_EXAMPLE
 example_streamed_request
 END_EXAMPLE
+
+## Example of pausing data retrieval using the `GET` method
+
+BEGIN_EXAMPLE
+example_pause_get_request
+END_EXAMPLE

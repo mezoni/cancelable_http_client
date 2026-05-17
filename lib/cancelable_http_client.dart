@@ -106,18 +106,14 @@ class CancelableClient with BaseClient {
       timer?.cancel();
     }
 
-    final stream = response.stream;
-    var cancelableStream = stream.asCancelable(
+    final stream = response.stream.asCancelable(
       _token,
+      pauseToken: _pauseToken,
       timeout: _responseTimeout,
     );
 
-    if (_pauseToken != null) {
-      cancelableStream = cancelableStream.asPausable(_pauseToken!);
-    }
-
     return StreamedResponse(
-      cancelableStream,
+      stream,
       response.statusCode,
       contentLength: response.contentLength,
       request: response.request,

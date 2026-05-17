@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.0
+
+- Added example file `example_pause_get_request.dart`.
+- Updated dependency on `multitasking` package to version 7.8.0.
+
 ## 2.2.0
 
 - The `pauseToken` parameter has been added to the `CancelableClient` class constructor.

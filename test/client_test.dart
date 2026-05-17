@@ -118,7 +118,7 @@ void _testClient() {
           response.bufferOutput = false;
           serverPrologue = true;
           await Future<void>.delayed(Duration(seconds: 5));
-          // sink.close() ignore
+          // Ignore lints
           // ignore: close_sinks
           final controller = StreamController<List<int>>();
           var isCanceled = false;
